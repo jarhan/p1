@@ -1,78 +1,98 @@
 import sys
-import socket as skt
-import os
+from socket import socket,AF_INET,SOCK_STREAM
 from urlparse import urlparse
 
 class Downloader():
 
     def __init__(self):
-        self.url = ""
+        self.host = ""
         self.port = 80
         self.filename = ""
-        self.path = "/Users/Pwtk/Downloads"
-        self.socket = skt.socket(skt.AF_INET, skt.SOCK_STREAM)
-        self.getheader = ""
-        self.all = ""
+        self.socket = socket(AF_INET, SOCK_STREAM)
+        self.header_connect = ""
         self.header = ""
         self.leftover = ""
-        self.data = ""
         self.conlength = 0
+        self.path = ""
 
     def connect(self):
-        self.socket = skt.socket(skt.AF_INET, skt.SOCK_STREAM)
-        self.socket.connect((self.url, self.port))
+        self.socket = socket(AF_INET, SOCK_STREAM)
+        self.socket.connect((self.host, self.port))
+        print "Connecting to server"
 
     # send request to server
-    def GET_header(self):
-        self.getheader = "GET " + self.path + " HTTP/1.1\r\n" + "Host: " + self.url + "\r\n\r\n"
-        self.socket.send(self.getheader)
+    def send_header(self):
+        self.header_connect = "GET " + self.connect_path + " HTTP/1.1\r\n" + "Host: " + self.host + "\r\n\r\n"
+        self.socket.send(self.header_connect)
 
     # extract content length from the header then cut it from the actual data
     def receive(self):
-        # self.all = ""
+        buffer = ""
         while True:
-            rcv = self.socket.recv(1024)
+            rcv = self.socket.recv(8096)
             if not rcv: break
-            self.all += rcv
-            if "\r\n\r\n" in all:
-                self.get_header(all)
-                # self.conlength = self.get_contentlength()
-                self.get_contentlength()
+            buffer += rcv
+
+            if "\r\n\r\n" in buffer:
+                self.get_header(buffer)
+                if "Content-Length" in self.header:
+                    self.get_contentlength()
                 break
 
-        while len(self.data) < self.conlength:
-            with open(os.path.join(self.path, self.filename), 'wb') as f:
+        print "Received header"
+
+        if self.conlength != 0:
+            with open(self.filename, 'w') as f:
+                f.write(self.leftover)
+                size = len(self.leftover)
+                while size < self.conlength:
+                    atad = self.socket.recv(8096)
+                    size += len(atad)
+                    f.write(atad)
+
+        else:
+            with open(self.filename, 'w') as f:
                 f.write(self.leftover)
                 while True:
-                    data = self.socket.recv(1024)
-                    if not data: break
-                    f.write(data)
+                    buff = self.socket.recv(8096)
+                    if not buffer:
+                        break
+                    f.write(buff)
+
+        f.close()
+        print "Data saved"
+        self.socket.close()
+        sys.exit()
+
+
+
+
+
+        print "Socket closed"
 
     def get_header(self, sth):
         self.header, self.leftover = sth.split("\r\n\r\n")
 
     def get_contentlength(self):
-        before, after = self.header.split("Content-Length: ")
-        num, left = after.split("\r\n")
-        self.conlength = int(num)
+        splitted = self.header.split("\r\n")
+        for each in splitted:
+            if "Content-Length" in each:
+                word, num = each.split(" ")
+                self.conlength = int(num)
 
     def DocEx(self, input):
-        # p = Downloader()
-        # print input
         self.filename = input[2]
-        ongoing = input[-1]
-        slp = urlparse(ongoing)
-        self.url = slp.hostname
-        if type(slp.port) == str: self.port = int(slp.port)
+        url = input[-1] # url:port
+        url_component = urlparse(url)
+        self.connect_path = url_component.path
+        self.host = url_component.hostname
+        if url_component.port != None:
+            self.port = int(url_component.port)
         self.connect()
-        self.GET_header()
+        self.send_header()
         self.receive()
-        self.socket.close()
-
 
 if __name__ == '__main__':
     input = sys.argv
     download = Downloader()
     download.DocEx(input)
-
-
