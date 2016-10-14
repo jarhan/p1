@@ -153,6 +153,7 @@ class Downloader():
         os.renames(self.filename + self.masur, self.filename)
 
         ad.close()
+        os.remove("info.txt")
         print "Data saved"
         self.socket.close()
         sys.exit()
