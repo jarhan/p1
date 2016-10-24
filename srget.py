@@ -16,6 +16,7 @@ class Downloader():
         self.leftover = ""
         self.curr_bytes = 0
         self.path = ""
+        self.NL = "\r\n"
 
         self.lastMod = ""
         self.conlength = 0
@@ -39,11 +40,11 @@ class Downloader():
 
     # send request to server
     def make_request(self):
-        self.header_connect = "GET " + self.connect_path + " HTTP/1.1\r\n" + "Host: " + self.host + "\r\n\r\n"
+        self.header_connect = "GET " + self.connect_path + " HTTP/1.1" + self.NL + "Host: " + self.host + self.NL + self.NL
         self.socket.send(self.header_connect)
 
     def make_resume(self):
-        self.resume_request = "GET " + self.connect_path + " HTTP/1.1\r\n" + "Host: " + self.host + "\r\nRange: bytes=" + str(self.curr_bytes) + "-" + str(self.Oconlength) + "\r\n\r\n"
+        self.resume_request = "GET " + self.connect_path + " HTTP/1.1" + self.NL + "Host: " + self.host + self.NL + "Range: bytes=" + str(self.curr_bytes) + "-" + str(self.Oconlength) + self.NL + self.NL
         self.socket.send(self.resume_request)
 
     # extract content length from the header then cut it from the actual data
@@ -54,49 +55,57 @@ class Downloader():
             if not rcv: break
             buffer += rcv
 
-            if "\r\n\r\n" in buffer:
+            if self.NL + self.NL in buffer:
                 self.get_header(buffer)
                 forCheck = self.get_fromHeader(self.header)
                 self.conlength = int(forCheck[0])
                 self.lastMod = forCheck[1]
                 self.ETag = forCheck[2]
-                info = '{}: {}\r\n{}: {}\r\n{}: {}\r\n'.format('Content-Length', self.conlength, 'Last-Modified', self.lastMod, 'ETag', self.ETag)
+                info = '{}: {}{}{}: {}{}{}: {}{}'.format('Content-Length', self.conlength, self.NL, 'Last-Modified', self.lastMod, self.NL, 'ETag', self.ETag, self.NL)
                 break
+
+
+        self.conlength, self.lastMod, self.ETag, info = self.start()
 
         print "Received header"
 
-        # header with Content-Length
-        if self.conlength != 0:
-            with open(self.filename + self.masur, 'wb+') as f, open("info.txt", 'w') as dw:
-                f.write(self.leftover)
-                size = len(self.leftover)
-                dw.write(info)
-                while size < self.conlength:
-                    atad = self.socket.recv(8096)
-                    size += len(atad)
-                    f.write(atad)
-                    dw.write('{}\r\n'.format(size))
+        try:
+            # header with Content-Length
+            if self.conlength != 0:
+                with open(self.filename + self.masur, 'wb+') as f, open("info.txt", 'wb+') as dw:
+                    f.write(self.leftover)
+                    size = len(self.leftover)
+                    dw.write(info)
+                    while size < self.conlength:
+                        atad = self.socket.recv(8096)
+                        size += len(atad)
+                        f.write(atad)
+                        dw.write('{}{}'.format(size, self.NL))
 
-        # header without Content-Length
-        else:
-            with open(self.filename + self.masur, 'wb+') as f, open("info.txt", 'w') as dw:
-                f.write(self.leftover)
-                dw.write(info)
-                while True:
-                    buff = self.socket.recv(8096)
-                    if not buff:
-                        break
-                    f.write(buff)
+            # header without Content-Length
+            else:
+                with open(self.filename + self.masur, 'wb+') as f, open("info.txt", 'wb+') as dw:
+                    f.write(self.leftover)
+                    dw.write(info)
+                    while True:
+                        buff = self.socket.recv(8096)
+                        if not buff:
+                            break
+                        f.write(buff)
 
-        os.renames(self.filename + self.masur, self.filename)
+            os.renames(self.filename + self.masur, self.filename)
 
-        f.close()
-        os.remove("info.txt")
-        print "Data saved"
-        self.socket.close()
-        sys.exit()
+            f.close()
+            os.remove("info.txt")
+            print "Data saved"
+            self.socket.close()
+            sys.exit()
 
-        print "Socket closed"
+            print "Socket closed"
+
+        except KeyboardInterrupt:
+            print "    Download failed"
+            sys.exit()
 
     def resume(self):
         buffer = ""
@@ -105,7 +114,7 @@ class Downloader():
             if not rcv: break
             buffer += rcv
 
-            if "\r\n\r\n" in buffer:
+            if self.NL + self.NL in buffer:
                 self.get_header(buffer)
                 forCheck = self.get_fromHeader(self.header)
                 self.Oconlength = int(forCheck[0])
@@ -113,24 +122,30 @@ class Downloader():
                 self.OETag = forCheck[2]
                 break
 
-        with open(self.filename + self.masur, 'a') as ad, open("info.txt", 'a') as ndw:
-            nsize = self.curr_bytes
-            while nsize < self.curr_bytes + self.Oconlength:
-                atad = self.socket.recv(8096)
-                nsize += len(atad)
-                ad.write(atad)
-                ndw.write('{}\r\n'.format(nsize))
+        print " Start Resuming"
 
+        try:
+            with open(self.filename + self.masur, 'a') as ad, open("info.txt", 'a') as ndw:
+                nsize = self.curr_bytes
+                total = self.curr_bytes + self.Oconlength
+                while nsize < total:
+                    atad = self.socket.recv(8096)
+                    nsize += len(atad)
+                    ad.write(atad)
+                    ndw.write('{}{}'.format(nsize, self.NL))
 
-        os.renames(self.filename + self.masur, self.filename)
+            os.renames(self.filename + self.masur, self.filename)
 
-        ad.close()
-        os.remove("info.txt")
-        print "Data saved"
-        self.socket.close()
-        sys.exit()
+            ad.close()
+            os.remove("info.txt")
+            print "Data saved"
+            self.socket.close()
+            sys.exit()
 
-        print "Socket closed"
+            print "Socket closed"
+
+        except KeyboardInterrupt:
+            print "    Resumed Interrupted"
 
     # for checking that file modified or not
     def check_similar(self):
@@ -144,10 +159,14 @@ class Downloader():
         return self.Oconlength == self.conlength and self.OlastMod == self.lastMod and self.OETag == self.ETag
 
     def get_header(self, sth):
-        self.header, self.leftover = sth.split("\r\n\r\n")
+        space = self.NL + self.NL
+        splitted = sth.split(space)
+        self.header = splitted[0]
+        if len(splitted) > 2: self.leftover = space.join(splitted[1:])
+        else: self.leftover = splitted[-1]
 
     def get_fromHeader(self, header):
-        splitted = header.split("\r\n")
+        splitted = header.split(self.NL)
         cl = ''
         lm = ''
         et = ''
