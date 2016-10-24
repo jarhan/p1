@@ -7,9 +7,7 @@ To run this program, go to the directory of this program by terminal, then:
 
 where saved_file_name is your desired file's name to download and address including http.
 
-This program works with http only.
-
-If the file's name already exist in your directory, "File already existed" will be printed on your screen.
+This program works with http only. And the program would report the program status continously such as connecting to server, starting download file or starting resume download.
 
 If the download is not finished/got canceled, it will save as .LYdownload and extra file info.txt
 
